@@ -46,3 +46,6 @@ poetry.lock
 
 checkpoints/
 runs/
+result/
+all_preds.csv
+our_prediction.csv

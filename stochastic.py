@@ -1,23 +1,29 @@
-import torch
 import math
 
+import torch
+
+
 def stochastic_response(column, epsilon, categories):
-    categories = torch.tensor(categories)
-    K = len(categories)
-    p = math.exp(epsilon) / (math.exp(epsilon) + K - 1)
+    """Apply randomized response to a single categorical feature column."""
+    categories = torch.as_tensor(categories, dtype=column.dtype, device=column.device)
+    num_categories = len(categories)
+    keep_probability = math.exp(epsilon) / (math.exp(epsilon) + num_categories - 1)
 
-    prob_matrix = torch.full_like(column.unsqueeze(-1).expand(*column.shape, K), (1 - p) / (K - 1))
+    probabilities = torch.full(
+        (*column.shape, num_categories),
+        (1 - keep_probability) / (num_categories - 1),
+        dtype=column.dtype,
+        device=column.device,
+    )
+    correct_indices = column.unsqueeze(-1) == categories.view((1,) * column.dim() + (-1,))
+    probabilities[correct_indices] = keep_probability
 
-    correct_indices = (column.unsqueeze(-1) == categories.view((1,) * column.dim() + (-1,)))
-    prob_matrix[correct_indices] = p
+    sampled_indices = torch.multinomial(probabilities, 1).squeeze(-1)
+    return categories[sampled_indices]
 
-    perturbed_indices = torch.multinomial(prob_matrix, 1).squeeze()
-    perturbed_column = categories[perturbed_indices]
-    return perturbed_column
 
 def attributeStochastic(inputs, index, epsilon, categories):
-    column = inputs[:, index]
-    inputs = inputs.clone()
-    inputs[:, index] = stochastic_response(column, epsilon, categories)
-    return inputs
-    
+    """Clone a batch and perturb one feature with randomized response."""
+    perturbed_inputs = inputs.clone()
+    perturbed_inputs[:, index] = stochastic_response(inputs[:, index], epsilon, categories)
+    return perturbed_inputs
